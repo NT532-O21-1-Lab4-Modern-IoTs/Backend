@@ -8,7 +8,7 @@ const mqttUsername = 'Dattt';
 const mqttPassword = 'Dat123456';
 const mqttTopic = 'cq21/nhom3/led';
 const sensorTopic = 'cq21/nhom3/sensor';
-
+const sensorBh1750 = 'cq21/nhom3/bh1750';
 
 // MongoDB setup
 const mongoUrl = 'mongodb://localhost:27017';
@@ -40,9 +40,9 @@ const mqttClient = mqtt.connect(mqttBrokerUrl, {
 
 mqttClient.on('connect', () => {
   console.log('Connected to MQTT broker');
-  mqttClient.subscribe([mqttTopic, sensorTopic], (err) => {
+  mqttClient.subscribe([mqttTopic, sensorTopic, sensorBh1750], (err) => {
     if (err) {
-      console.error('Error subscribing to topic:', err);
+      console.error('Error subscribing to topics:', err);
     } else {
       console.log('Subscribed to topics');
     }
@@ -53,27 +53,43 @@ mqttClient.on('message', async (topic, message) => {
   console.log('Received message from topic:', topic);
   console.log('Message:', message.toString());
 
-  if (topic === sensorTopic) {
+  if (topic === sensorTopic || topic === sensorBh1750) {
     const payload = message.toString();
     const [tempPart, humidPart] = payload.split(',');
-    const temperature = parseFloat(tempPart.split(':')[1]);
-    const humidity = parseFloat(humidPart.split(':')[1]);
+    let temperature, humidity;
+    let light;
+    // Check if it's the sensorBH1750 topic
+    if (topic === sensorBh1750) {
+      light = parseFloat(humidPart.split(':')[1]); // Temperature is humidity in BH1750 sensor
+      sensorData.light = light;
+      sensorData.humidity = 0;
+      sensorData.temperature = 0;
+    } else {
+      temperature = parseFloat(tempPart.split(':')[1]);
+      humidity = parseFloat(humidPart.split(':')[1]);
+      sensorData.temperature = temperature;
+      sensorData.humidity = humidity;
+      sensorData.light = 0;
+    }
 
-    sensorData.temperature = temperature;
-    sensorData.humidity = humidity;
     console.log(`Updated sensor data: ${JSON.stringify(sensorData)}`);
 
     // Save to MongoDB
     if (sensorDataCollection) {
+      let collectionName = 'DHT11'; // Default collection name
+      if (topic === sensorBh1750) {
+        collectionName = 'bh1750'; // Change collection name for BH1750 sensor
+      }
       try {
         await sensorDataCollection.insertOne({
           temperature,
           humidity,
+          light,
           timestamp: new Date(),
         });
-        console.log('Sensor data saved to MongoDB');
+        console.log(`Sensor data saved to MongoDB in collection ${collectionName}`);
       } catch (err) {
-        console.error('Error saving sensor data to MongoDB:', err);
+        console.error(`Error saving sensor data to MongoDB in collection ${collectionName}:`, err);
       }
     }
   }
@@ -95,7 +111,7 @@ app.get('/mongoDB/getAll/DHT11', async (req, res) => {
 app.post('/control/:id', (req, res) => {
   const { id } = req.params;
   let message;
-  switch(id) {
+  switch (id) {
     case 'on1':
       message = 'on1';
       break;
@@ -115,7 +131,6 @@ app.post('/control/:id', (req, res) => {
   mqttClient.publish(mqttTopic, message);
   res.send(`LED command ${message}`);
 });
-
 
 app.listen(8000, async () => {
   console.log('Server is running on port 8000');
