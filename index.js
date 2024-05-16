@@ -58,9 +58,8 @@ mqttClient.on('message', async (topic, message) => {
     const [tempPart, humidPart] = payload.split(',');
     let temperature, humidity;
     let light;
-    // Check if it's the sensorBH1750 topic
     if (topic === sensorBh1750) {
-      light = parseFloat(humidPart.split(':')[1]); // Temperature is humidity in BH1750 sensor
+      light = parseFloat(light.split(':')[1]);
       sensorData.light = light;
       sensorData.humidity = 0;
       sensorData.temperature = 0;
@@ -94,6 +93,7 @@ mqttClient.on('message', async (topic, message) => {
     }
   }
 });
+
 
 app.get('/', (req, res) => {
   res.send('Express server is running');
